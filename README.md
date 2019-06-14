@@ -79,11 +79,39 @@ Somewhere in your Javascript
 call('get_logs', 'error', 100).then(function(logs) {
   console.log(logs);
 }, function(err) {
-  console.log(logs);
+  console.log(err);
 })
 ```
 
 Thats it. You can bind any Go function as long as it returns 2 values. The first one can be of any type you like to return to your Javascript and the second one must be a error. Checking if the call from Javascript has the correct arguments and marshaling and unmarshaling the data will all be handled by nra.
+
+# Structs
+
+Passing structs from Javascript to Go and back is also supported.
+
+```Go
+type Search struct {
+  Text   string `json:"text"`
+  Limit  int    `json:"limit"`
+}
+
+type DataEntry struct {
+  Text   string    `json:"text"`
+  Time   time.Time `json:"time"`
+}
+
+http.HandleFunc("/rpc/get_structs", nra.MustBind(func(search Search) ([]DataEntry, error) {
+  // search and return your DataEntries
+}))
+```
+
+```Javascript
+call('get_logs', { text: "my search", limit: 250 }).then(function(data_entries) {
+  console.log(data_entries);
+}, function(err) {
+  console.log(err);
+})
+```
 
 # How does it work?
 
