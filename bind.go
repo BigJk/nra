@@ -4,7 +4,6 @@ package nra
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"reflect"
 
@@ -89,7 +88,6 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 			if argType == nil {
 				// check if the argument in fn can be nil. if it
 				// can be we will create a nil value for the type.
-				fmt.Println(fnType.In(i).Kind().String())
 				switch fnType.In(i).Kind() {
 				case reflect.Ptr:
 					fallthrough
