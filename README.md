@@ -46,7 +46,7 @@ package main
 import (
 	"net/http"
 	"strings"
-  "fmt"
+	"fmt"
 
 	"github.com/BigJk/nra"
 )
