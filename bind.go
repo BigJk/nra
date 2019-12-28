@@ -4,6 +4,7 @@ package nra
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"reflect"
 
@@ -14,10 +15,15 @@ import (
 // Bind creates a http.HandlerFunc from a function.
 // this handler can than be called from Javascript.
 //
-// the fn function can take any number of arguments,
-// but needs to return 2 values. The first one is your
-// custom return type (can also be interface{}) and the
-// second one must be a error.
+// The fn function can take any number of arguments,
+// but needs to return either 1 or 2 values.
+//
+// 2 values:
+// The first one is your custom return type (can also be interface{})
+// and the second one must be a error.
+//
+// 1 value:
+// The return must be a error.
 //
 // a valid function would be:
 //   func CallMe(a int, b string) (string, error) {
@@ -38,13 +44,29 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 	}
 
 	// check that fn returns 2 values.
-	if fnType.NumOut() != 2 {
+	if fnType.NumOut() > 2 {
 		return nil, errors.New("fn doesn't return 2 values")
 	}
 
-	// check if the second return value implements the error interface.
-	if fnType.Out(1).Kind() != reflect.Interface || !fnType.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+	errReturnIndex := 1
+	if fnType.NumOut() == 1 {
+		errReturnIndex = 0
+	}
+
+	// check if the expected error return value implements the error interface.
+	if fnType.Out(errReturnIndex).Kind() != reflect.Interface || !fnType.Out(errReturnIndex).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 		return nil, errors.New("fn doesn't return a error as second value")
+	}
+
+	passRequest := false
+	argNum := fnType.NumIn()
+	argOffset := 0
+
+	// Check if *http.Request should be passed to target function.
+	if fnType.In(0) == reflect.TypeOf(new(http.Request)) {
+		passRequest = true
+		argNum--
+		argOffset++
 	}
 
 	return func(writer http.ResponseWriter, request *http.Request) {
@@ -52,7 +74,7 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 		// will get the arguments to call fn from the
 		// post data.
 		if request.Method != "POST" {
-			http.Error(writer, "only POST requests are permitted", http.StatusBadRequest)
+			http.Error(writer, "\"only POST requests are permitted\"", http.StatusBadRequest)
 			return
 		}
 
@@ -72,8 +94,8 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 		}
 
 		// check if number of arguments match the fn function.
-		if len(args) != fnType.NumIn() {
-			http.Error(writer, "number of arguments mismatch", http.StatusBadRequest)
+		if len(args) != argNum {
+			http.Error(writer, "\"number of arguments mismatch\"", http.StatusBadRequest)
 			return
 		}
 
@@ -88,21 +110,23 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 			if argType == nil {
 				// check if the argument in fn can be nil. if it
 				// can be we will create a nil value for the type.
-				switch fnType.In(i).Kind() {
+				switch fnType.In(i + argOffset).Kind() {
 				case reflect.Ptr:
 					fallthrough
 				case reflect.Uintptr:
 					fallthrough
 				case reflect.Map:
 					fallthrough
+				case reflect.Array:
+					fallthrough
 				case reflect.Slice:
-					callValues = append(callValues, reflect.New(fnType.In(i)).Elem())
+					callValues = append(callValues, reflect.New(fnType.In(i+argOffset)).Elem())
 					continue
 				}
 
 				// otherwise we return a error because the argument couldn't
 				// be a nil value.
-				http.Error(writer, errors.Errorf("%d. can't be null", i+1).Error(), http.StatusBadRequest)
+				http.Error(writer, errors.Errorf("\"%d. can't be null\"", i+1).Error(), http.StatusBadRequest)
 				return
 			}
 
@@ -113,8 +137,11 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 			// we can dynamically create the struct we want and decode the
 			// map[string]interface{} to the struct with the help of the
 			// mapstructure package.
-			if fnType.In(i).Kind() == reflect.Struct && argType.Kind() == reflect.Map {
-				s := reflect.New(fnType.In(i))
+			//
+			// same works with converting a javascript array to a golang
+			// slice.
+			if fnType.In(i+argOffset).Kind() == reflect.Struct && argType.Kind() == reflect.Map || fnType.In(i+argOffset).Kind() == reflect.Slice && argType.Kind() == reflect.Slice {
+				s := reflect.New(fnType.In(i + argOffset))
 				if err := mapstructure.Decode(args[i], s.Interface()); err != nil {
 					http.Error(writer, err.Error(), http.StatusBadRequest)
 					return
@@ -125,12 +152,12 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 			}
 
 			// check if the argument types mismatch.
-			if fnType.In(i).Kind() != argType.Kind() {
+			if fnType.In(i+argOffset).Kind() != argType.Kind() {
 				// numbers that are generically decoded from JSON will
 				// always be float64. In case fn wants some other number
 				// type we can just convert it to the target type.
 				if argType.Kind() == reflect.Float64 {
-					switch fnType.In(i).Kind() {
+					switch fnType.In(i + argOffset).Kind() {
 					case reflect.Int:
 						fallthrough
 					case reflect.Int8:
@@ -150,13 +177,13 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 					case reflect.Uint64:
 						fallthrough
 					case reflect.Float32:
-						callValues = append(callValues, reflect.ValueOf(args[i]).Convert(fnType.In(i)))
+						callValues = append(callValues, reflect.ValueOf(args[i]).Convert(fnType.In(i+argOffset)))
 						continue
 					}
 				}
 
 				// otherwise we return a error as no conversion was applicable.
-				http.Error(writer, errors.Errorf("mismatching argument type of %d. argument. got=%s expected=%s", i+1, argType.Kind().String(), fnType.In(i).Kind().String()).Error(), http.StatusBadRequest)
+				http.Error(writer, errors.Errorf("\"mismatching argument type of %d. argument. got=%s expected=%s\"", i+1, argType.Kind().String(), fnType.In(i+argOffset).Kind().String()).Error(), http.StatusBadRequest)
 				return
 			}
 
@@ -165,19 +192,27 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 		}
 
 		// call our fn function with the collected values.
-		res := fnValue.Call(callValues)
+		var res []reflect.Value
+		if passRequest {
+			res = fnValue.Call(append([]reflect.Value{reflect.ValueOf(request)}, callValues...))
+		} else {
+			res = fnValue.Call(callValues)
+		}
 
 		// check if error is present and return it.
-		if res[1].Interface() != nil {
-			err := res[1].Interface().(error)
+		if res[errReturnIndex].Interface() != nil {
+			err := res[errReturnIndex].Interface().(error)
 			if err != nil {
-				http.Error(writer, err.Error(), http.StatusBadRequest)
+				http.Error(writer, fmt.Sprintf("\"%s\"", err.Error()), http.StatusBadRequest)
 				return
 			}
 		}
 
-		// otherwise JSON encode the returned value and write it to the response
-		_ = json.NewEncoder(writer).Encode(res[0].Interface())
+		// if the functions has a return value besides the error
+		// JSON encode the returned value and write it to the response.
+		if errReturnIndex == 1 {
+			_ = json.NewEncoder(writer).Encode(res[0].Interface())
+		}
 	}, nil
 }
 
@@ -185,6 +220,9 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 // this can be used if you want to directly pass the result
 // to http.HandleFunc.
 func MustBind(fn interface{}) http.HandlerFunc {
-	h, _ := Bind(fn)
+	h, err := Bind(fn)
+	if err != nil {
+		panic("nra: bind failed with: " + err.Error())
+	}
 	return h
 }

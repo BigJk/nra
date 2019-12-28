@@ -22,6 +22,18 @@ type testCase struct {
 
 var tests = []testCase{
 	{
+		Name:     "get_request",
+		Input:    "[[10, 11, 12]]",
+		Expected: "\"ok\"\n",
+		Code:     http.StatusOK,
+		Function: func(r *http.Request, a []int) (string, error) {
+			if r.Header.Get("TestHeader") != "abc" {
+				return "", fmt.Errorf("header was incorrect")
+			}
+			return "ok", nil
+		},
+	},
+	{
 		Name:     "generic",
 		Input:    "[1, \"test_string\", 123.2451]",
 		Expected: "\"1+test_string+123.2\"\n",
@@ -31,13 +43,31 @@ var tests = []testCase{
 		},
 	},
 	{
+		Name:     "only_error_fail",
+		Input:    "[1, \"test_string\", 123.2451]",
+		Expected: "\"error\"\n",
+		Code:     http.StatusBadRequest,
+		Function: func(a int, b string, c float64) error {
+			return fmt.Errorf("error")
+		},
+	},
+	{
+		Name:     "only_error",
+		Input:    "[1, \"test_string\", 123.2451]",
+		Expected: "",
+		Code:     http.StatusOK,
+		Function: func(a int, b string, c float64) error {
+			return nil
+		},
+	},
+	{
 		Name:     "nil_values",
 		Input:    "[null, null, null]",
 		Expected: "\"ok\"\n",
 		Code:     http.StatusOK,
 		Function: func(a *int, b *string, c map[string]string) (string, error) {
 			if a == nil && b == nil && c == nil {
-				return fmt.Sprintf("ok"), nil
+				return "ok", nil
 			}
 			return "", errors.New("not everything was nil")
 		},
@@ -59,7 +89,7 @@ var tests = []testCase{
 	{
 		Name:     "not_nilable",
 		Input:    "[null, null, null]",
-		Expected: "1. can't be null\n",
+		Expected: "\"1. can't be null\"\n",
 		Code:     http.StatusBadRequest,
 		Function: func(a int, b string, c float64) (interface{}, error) {
 			return nil, nil
@@ -68,7 +98,7 @@ var tests = []testCase{
 	{
 		Name:     "wrong_type",
 		Input:    "[{\"a\":1233,\"b\":{\"c\":\"hello\"}}]",
-		Expected: "mismatching argument type of 1. argument. got=map expected=int\n",
+		Expected: "\"mismatching argument type of 1. argument. got=map expected=int\"\n",
 		Code:     http.StatusBadRequest,
 		Function: func(a int) (interface{}, error) {
 			return nil, nil
@@ -88,6 +118,7 @@ func TestBind(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			req.Header.Set("TestHeader", "abc")
 
 			rr := httptest.NewRecorder()
 			h.ServeHTTP(rr, req)
