@@ -34,7 +34,7 @@ import (
 //   }
 //
 func Bind(fn interface{}) (http.HandlerFunc, error) {
-	// get the type and value via reflection
+	// get the type and value via reflection.
 	fnType := reflect.TypeOf(fn)
 	fnValue := reflect.ValueOf(fn)
 
@@ -43,9 +43,9 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 		return nil, errors.New("fn wasn't a function")
 	}
 
-	// check that fn returns 2 values.
-	if fnType.NumOut() > 2 {
-		return nil, errors.New("fn doesn't return 2 values")
+	// check that fn has a single or two returns.
+	if fnType.NumOut() == 0 || fnType.NumOut() > 2 {
+		return nil, errors.New("fn doesn't return 1 or 2 values")
 	}
 
 	errReturnIndex := 1
@@ -63,7 +63,7 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 	argOffset := 0
 
 	// Check if *http.Request should be passed to target function.
-	if fnType.In(0) == reflect.TypeOf(new(http.Request)) {
+	if argNum > 0 && fnType.In(0) == reflect.TypeOf(new(http.Request)) {
 		passRequest = true
 		argNum--
 		argOffset++
