@@ -1,5 +1,5 @@
 # nra
-[![Documentation](https://godoc.org/github.com/BigJk/nra/console?status.svg)](http://godoc.org/github.com/BigJk/ramen/console) [![Go Report Card](https://goreportcard.com/badge/github.com/BigJk/nra)](https://goreportcard.com/report/github.com/BigJk/nra)
+[![Documentation](https://godoc.org/github.com/BigJk/nra?status.svg)](http://godoc.org/github.com/BigJk/nra) [![Go Report Card](https://goreportcard.com/badge/github.com/BigJk/nra)](https://goreportcard.com/report/github.com/BigJk/nra)
 
 nra (not REST again) is a minimal RPC library to call Go from Javascript. After building yet another REST api just to get some data from a Go backend to a small frontend I grew tired of the process. This library is not intended as a replacement for REST. It purpose is to get data from Go to Javascript with the smallest amount of work. It's perfect for small pet projects where you don't need any advanced features, high security or insane throughput.
 
