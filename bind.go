@@ -4,12 +4,12 @@ package nra
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
 )
 
 // Bind creates a http.HandlerFunc from a function.
@@ -126,7 +126,7 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 
 				// otherwise we return a error because the argument couldn't
 				// be a nil value.
-				http.Error(writer, errors.Errorf("\"%d. can't be null\"", i+1).Error(), http.StatusBadRequest)
+				http.Error(writer, fmt.Sprintf("\"%d. can't be null\"", i+1), http.StatusBadRequest)
 				return
 			}
 
@@ -142,7 +142,19 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 			// slice.
 			if fnType.In(i+argOffset).Kind() == reflect.Struct && argType.Kind() == reflect.Map || fnType.In(i+argOffset).Kind() == reflect.Slice && argType.Kind() == reflect.Slice {
 				s := reflect.New(fnType.In(i + argOffset))
-				if err := mapstructure.Decode(args[i], s.Interface()); err != nil {
+
+				// Create a decoder that honors the json tags
+				decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+					Metadata: nil,
+					TagName:  "json",
+					Result:   s.Interface(),
+				})
+
+				if err != nil {
+					http.Error(writer, fmt.Sprintf("\"error while creating decoder: %v\"", err), http.StatusBadRequest)
+				}
+
+				if err := decoder.Decode(args[i]); err != nil {
 					http.Error(writer, err.Error(), http.StatusBadRequest)
 					return
 				}
@@ -183,7 +195,7 @@ func Bind(fn interface{}) (http.HandlerFunc, error) {
 				}
 
 				// otherwise we return a error as no conversion was applicable.
-				http.Error(writer, errors.Errorf("\"mismatching argument type of %d. argument. got=%s expected=%s\"", i+1, argType.Kind().String(), fnType.In(i+argOffset).Kind().String()).Error(), http.StatusBadRequest)
+				http.Error(writer, fmt.Sprintf("\"mismatching argument type of %d. argument. got=%s expected=%s\"", i+1, argType.Kind().String(), fnType.In(i+argOffset).Kind().String()), http.StatusBadRequest)
 				return
 			}
 

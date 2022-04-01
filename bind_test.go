@@ -2,12 +2,11 @@ package nra
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/pkg/errors"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -74,7 +73,7 @@ var tests = []testCase{
 	},
 	{
 		Name:     "struct",
-		Input:    "[{\"a\":1233,\"b\":{\"c\":\"hello\"}}]",
+		Input:    "[{\"c\":1233,\"a\":{\"b\":\"hello\"}}]",
 		Expected: "{\"c\":1233,\"a\":{\"b\":\"hello\"}}\n",
 		Code:     http.StatusOK,
 		Function: func(a struct {
@@ -123,7 +122,7 @@ func TestBind(t *testing.T) {
 			rr := httptest.NewRecorder()
 			h.ServeHTTP(rr, req)
 
-			if !assert.Equal(t, tests[i].Code, rr.Code) || !assert.Equal(t, tests[i].Expected, rr.Body.String()) {
+			if !assert.Equal(t, tests[i].Code, rr.Code, "error:", rr.Body.String()) || !assert.Equal(t, tests[i].Expected, rr.Body.String()) {
 				return
 			}
 		})
